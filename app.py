@@ -324,7 +324,7 @@ def process_attendance():
                     # Assuming distances typically range from 0 to 100
                     confidence_percentage = max(0, 100 - (avg_distance / 100))
                     
-                    if confidence_percentage > 30:  # Lower threshold for better recognition
+                    if confidence_percentage > 70:  # Higher threshold to reduce false positives
                         student_idx = prediction[0]
                         if student_idx < len(student_names):
                             name = student_names[student_idx]
@@ -748,14 +748,14 @@ def debug_attendance():
                     face_debug['confidence'] = round(confidence_percentage, 2)
                     face_debug['confidence_formula'] = f"100 - ({avg_distance:.3f} / 100) = {confidence_percentage:.2f}%"
                     
-                    if confidence_percentage > 30:
+                    if confidence_percentage > 70:
                         student_idx = prediction[0]
                         if student_idx < len(student_names):
                             face_debug['predicted_student'] = student_names[student_idx]
                         else:
                             face_debug['error'] = f"Student index {student_idx} out of range (max: {len(student_names)-1})"
                     else:
-                        face_debug['error'] = f"Confidence too low: {confidence_percentage:.2f}% (threshold: 30%)"
+                        face_debug['error'] = f"Confidence too low: {confidence_percentage:.2f}% (threshold: 70%)"
                 else:
                     if face_recognizer is None:
                         face_debug['error'] = "Face recognizer not trained"
