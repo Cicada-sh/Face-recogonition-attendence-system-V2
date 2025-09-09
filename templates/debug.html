@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Face Recognition - Face Recognition Attendance</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        .debug-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .camera-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+        }
+
+        .camera-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        #video {
+            width: 100%;
+            max-width: 500px;
+            border-radius: 10px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+
+        .controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+
+        .debug-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+
+        .debug-section h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .debug-info {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+
+        .debug-info h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .debug-info p {
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-success {
+            background: #28a745;
+        }
+
+        .status-error {
+            background: #dc3545;
+        }
+
+        .status-warning {
+            background: #ffc107;
+        }
+        
+        .status-info {
+            background: #17a2b8;
+        }
+
+        .face-debug {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+
+        .face-debug h4 {
+            color: #333;
+            margin-bottom: 10px;
+        }
+
+        .face-debug .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            padding: 5px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .face-debug .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .face-debug .label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .face-debug .value {
+            color: #666;
+        }
+
+        .error-message {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .success-message {
+            background: #d4edda;
+            color: #155724;
+            padding: 10px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+
+        .navigation {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        @media (max-width: 768px) {
+            .debug-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="navigation">
+        <a href="/" class="btn btn-secondary">Attendance</a>
+        <a href="/setup" class="btn btn-secondary">Setup</a>
+        <a href="/teacher-login" class="btn btn-primary">Teacher Login</a>
+    </div>
+
+    <div class="header">
+        <h1>🔍 Debug Face Recognition</h1>
+        <p>See what's happening behind the scenes</p>
+    </div>
+
+    <div class="container">
+        <div id="alert" class="alert"></div>
+
+        <div class="debug-grid">
+            <div class="camera-section">
+                <h3>📹 Live Camera Feed</h3>
+                <video id="video" autoplay muted></video>
+                <div class="controls">
+                    <button id="startBtn" class="btn btn-primary">Start Camera</button>
+                    <button id="debugBtn" class="btn btn-success" disabled>Debug Recognition</button>
+                    <button id="stopBtn" class="btn btn-secondary" disabled>Stop Camera</button>
+                </div>
+                <div class="controls" style="margin-top: 10px;">
+                    <button id="cleanupBtn" class="btn btn-secondary">Cleanup Duplicates</button>
+                </div>
+                <div class="controls" style="margin-top: 10px;">
+                    <button id="clearAllBtn" class="btn btn-danger">Clear All Data</button>
+                </div>
+            </div>
+
+            <div class="debug-section">
+                <h3>🔍 Debug Information</h3>
+                <div id="debugOutput">
+                    <div class="debug-info">
+                        <h4>System Status</h4>
+                        <p>Click "Start Camera" and then "Debug Recognition" to see detailed information about face detection and recognition.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('video');
+        let startBtn = document.getElementById('startBtn');
+        let debugBtn = document.getElementById('debugBtn');
+        let stopBtn = document.getElementById('stopBtn');
+        let debugOutput = document.getElementById('debugOutput');
+        let alert = document.getElementById('alert');
+
+        let stream = null;
+
+        startBtn.addEventListener('click', startCamera);
+        stopBtn.addEventListener('click', stopCamera);
+        debugBtn.addEventListener('click', debugRecognition);
+        cleanupBtn.addEventListener('click', cleanupDuplicates);
+        clearAllBtn.addEventListener('click', clearAllData);
+
+        async function startCamera() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                video.srcObject = stream;
+                
+                startBtn.disabled = true;
+                debugBtn.disabled = false;
+                stopBtn.disabled = false;
+                
+                showAlert('Camera started! Click "Debug Recognition" to analyze the current frame.', 'info');
+                
+            } catch (error) {
+                console.error('Error accessing camera:', error);
+                showAlert('Error accessing camera. Please check permissions.', 'error');
+            }
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            
+            video.srcObject = null;
+            startBtn.disabled = false;
+            debugBtn.disabled = true;
+            stopBtn.disabled = true;
+            
+            showAlert('Camera stopped.', 'info');
+        }
+
+        async function debugRecognition() {
+            if (!stream) {
+                showAlert('Please start the camera first.', 'error');
+                return;
+            }
+
+            debugBtn.disabled = true;
+            debugBtn.textContent = 'Processing...';
+
+            try {
+                // Capture frame
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                ctx.drawImage(video, 0, 0);
+                
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                
+                // Send to debug endpoint
+                const response = await fetch('/api/debug-attendance', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ image: imageData })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    displayDebugInfo(result.debug_info);
+                } else {
+                    showAlert('Debug failed: ' + result.message, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Debug error:', error);
+                showAlert('Error during debug: ' + error.message, 'error');
+            } finally {
+                debugBtn.disabled = false;
+                debugBtn.textContent = 'Debug Recognition';
+            }
+        }
+
+        function displayDebugInfo(debugInfo) {
+            let html = '';
+
+            // System Status
+            html += `
+                <div class="debug-info">
+                    <h4>System Status</h4>
+                    <p><span class="status-indicator ${debugInfo.face_recognizer_status ? 'status-success' : 'status-error'}"></span>
+                    Face Recognizer: ${debugInfo.face_recognizer_status ? 'Trained' : 'Not Trained'}</p>
+                    <p><span class="status-indicator ${debugInfo.student_count > 0 ? 'status-success' : 'status-warning'}"></span>
+                    Students Registered: ${debugInfo.student_count}</p>
+                    <p><span class="status-indicator status-info"></span>
+                    KNN Neighbors: ${debugInfo.knn_neighbors || 0}</p>
+                    <p><span class="status-indicator ${debugInfo.faces_detected > 0 ? 'status-success' : 'status-warning'}"></span>
+                    Faces Detected: ${debugInfo.faces_detected}</p>
+                </div>
+            `;
+
+            // Student List
+            if (debugInfo.student_names.length > 0) {
+                html += `
+                    <div class="debug-info">
+                        <h4>Registered Students</h4>
+                        ${debugInfo.student_names.map(name => `<p>• ${name}</p>`).join('')}
+                    </div>
+                `;
+            }
+
+            // Face Recognition Attempts
+            if (debugInfo.recognition_attempts.length > 0) {
+                debugInfo.recognition_attempts.forEach(face => {
+                    html += `
+                        <div class="face-debug">
+                            <h4>Face ${face.face_index + 1}</h4>
+                            <div class="info-row">
+                                <span class="label">Size:</span>
+                                <span class="value">${face.face_size}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Position:</span>
+                                <span class="value">${face.face_position}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Recognition Attempted:</span>
+                                <span class="value">${face.recognition_attempted ? 'Yes' : 'No'}</span>
+                            </div>
+                            <div class="info-row">
+                                <span class="label">Features Extracted:</span>
+                                <span class="value">${face.features_extracted ? 'Yes' : 'No'}</span>
+                            </div>
+                            ${face.feature_count ? `
+                            <div class="info-row">
+                                <span class="label">Feature Count:</span>
+                                <span class="value">${face.feature_count}</span>
+                            </div>
+                            ` : ''}
+                            ${face.feature_range ? `
+                            <div class="info-row">
+                                <span class="label">Feature Range:</span>
+                                <span class="value">${face.feature_range}</span>
+                            </div>
+                            ` : ''}
+                            ${face.feature_mean ? `
+                            <div class="info-row">
+                                <span class="label">Feature Mean:</span>
+                                <span class="value">${face.feature_mean}</span>
+                            </div>
+                            ` : ''}
+                            <div class="info-row">
+                                <span class="label">Prediction Made:</span>
+                                <span class="value">${face.prediction_made ? 'Yes' : 'No'}</span>
+                            </div>
+                            ${face.predicted_label !== undefined ? `
+                            <div class="info-row">
+                                <span class="label">Predicted Label:</span>
+                                <span class="value">${face.predicted_label}</span>
+                            </div>
+                            ` : ''}
+                            <div class="info-row">
+                                <span class="label">Confidence:</span>
+                                <span class="value">${face.confidence}%</span>
+                            </div>
+                            ${face.predicted_student ? `
+                            <div class="info-row">
+                                <span class="label">Predicted Student:</span>
+                                <span class="value">${face.predicted_student}</span>
+                            </div>
+                            ` : ''}
+                            ${face.avg_distance !== undefined ? `
+                            <div class="info-row">
+                                <span class="label">Average Distance:</span>
+                                <span class="value">${face.avg_distance}</span>
+                            </div>
+                            ` : ''}
+                            ${face.distances ? `
+                            <div class="info-row">
+                                <span class="label">Distances to Neighbors:</span>
+                                <span class="value">${face.distances.map(d => d.toFixed(3)).join(', ')}</span>
+                            </div>
+                            ` : ''}
+                            ${face.confidence_formula ? `
+                            <div class="info-row">
+                                <span class="label">Confidence Formula:</span>
+                                <span class="value">${face.confidence_formula}</span>
+                            </div>
+                            ` : ''}
+                            ${face.error ? `
+                            <div class="error-message">
+                                <strong>Error:</strong> ${face.error}
+                            </div>
+                            ` : ''}
+                        </div>
+                    `;
+                });
+            } else if (debugInfo.faces_detected === 0) {
+                html += `
+                    <div class="debug-info">
+                        <h4>No Faces Detected</h4>
+                        <p>Make sure your face is clearly visible in the camera and well-lit.</p>
+                    </div>
+                `;
+            }
+
+            // Errors
+            if (debugInfo.errors.length > 0) {
+                html += `
+                    <div class="debug-info">
+                        <h4>System Errors</h4>
+                        ${debugInfo.errors.map(error => `<p class="error-message">${error}</p>`).join('')}
+                    </div>
+                `;
+            }
+
+            debugOutput.innerHTML = html;
+        }
+
+        async function cleanupDuplicates() {
+            try {
+                const response = await fetch('/api/cleanup-duplicates', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    // Refresh the debug info if camera is running
+                    if (stream) {
+                        setTimeout(debugRecognition, 1000);
+                    }
+                } else {
+                    showAlert('Cleanup failed: ' + result.message, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Cleanup error:', error);
+                showAlert('Error during cleanup: ' + error.message, 'error');
+            }
+        }
+
+
+        async function clearAllData() {
+            if (!confirm('Are you sure you want to clear ALL training data? This will delete all students and attendance records. This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/clear-all-data', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    showAlert(result.message, 'success');
+                    // Refresh the debug info if camera is running
+                    if (stream) {
+                        setTimeout(debugRecognition, 1000);
+                    }
+                } else {
+                    showAlert('Clear failed: ' + result.message, 'error');
+                }
+                
+            } catch (error) {
+                console.error('Clear error:', error);
+                showAlert('Error during clear: ' + error.message, 'error');
+            }
+        }
+
+        function showAlert(message, type) {
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
+
+        // Initialize
+        showAlert('Start the camera and click "Debug Recognition" to see detailed face recognition information.', 'info');
+    </script>
+</body>
+</html>
