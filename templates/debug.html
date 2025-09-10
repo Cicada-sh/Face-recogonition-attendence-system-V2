@@ -4,262 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Debug Face Recognition - Face Recognition Attendance</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .header {
-            text-align: center;
-            color: white;
-            margin-bottom: 30px;
-        }
-
-        .header h1 {
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            padding: 30px;
-        }
-
-        .debug-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
-            margin-bottom: 30px;
-        }
-
-        .camera-section {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-        }
-
-        .camera-section h3 {
-            color: #333;
-            margin-bottom: 15px;
-        }
-
-        #video {
-            width: 100%;
-            max-width: 500px;
-            border-radius: 10px;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-
-        .controls {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-top: 20px;
-            flex-wrap: wrap;
-        }
-
-        .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: inline-block;
-        }
-
-        .btn-primary {
-            background: linear-gradient(45deg, #667eea, #764ba2);
-            color: white;
-        }
-
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
-        }
-
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #218838;
-            transform: translateY(-2px);
-        }
-
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c82333;
-            transform: translateY(-2px);
-        }
-
-        .debug-section {
-            background: #f8f9fa;
-            border-radius: 15px;
-            padding: 20px;
-            max-height: 600px;
-            overflow-y: auto;
-        }
-
-        .debug-section h3 {
-            color: #333;
-            margin-bottom: 15px;
-        }
-
-        .debug-info {
-            background: white;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-        }
-
-        .debug-info h4 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .debug-info p {
-            color: #666;
-            margin-bottom: 5px;
-        }
-
-        .status-indicator {
-            display: inline-block;
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            margin-right: 8px;
-        }
-
-        .status-success {
-            background: #28a745;
-        }
-
-        .status-error {
-            background: #dc3545;
-        }
-
-        .status-warning {
-            background: #ffc107;
-        }
-        
-        .status-info {
-            background: #17a2b8;
-        }
-
-        .face-debug {
-            background: white;
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-left: 4px solid #667eea;
-        }
-
-        .face-debug h4 {
-            color: #333;
-            margin-bottom: 10px;
-        }
-
-        .face-debug .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-            padding: 5px 0;
-            border-bottom: 1px solid #eee;
-        }
-
-        .face-debug .info-row:last-child {
-            border-bottom: none;
-        }
-
-        .face-debug .label {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .face-debug .value {
-            color: #666;
-        }
-
-        .error-message {
-            background: #f8d7da;
-            color: #721c24;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-
-        .success-message {
-            background: #d4edda;
-            color: #155724;
-            padding: 10px;
-            border-radius: 5px;
-            margin-top: 10px;
-        }
-
-        .navigation {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            display: flex;
-            gap: 10px;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-            display: none;
-        }
-
-        .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-
-        @media (max-width: 768px) {
-            .debug-grid {
-                grid-template-columns: 1fr;
-            }
-            
-            .header h1 {
-                font-size: 2rem;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
     <div class="navigation">
@@ -269,16 +14,16 @@
     </div>
 
     <div class="header">
-        <h1>🔍 Debug Face Recognition</h1>
+        <h1>Debug Face Recognition</h1>
         <p>See what's happening behind the scenes</p>
     </div>
 
-    <div class="container">
+    <div class="container glass-container">
         <div id="alert" class="alert"></div>
 
         <div class="debug-grid">
-            <div class="camera-section">
-                <h3>📹 Live Camera Feed</h3>
+            <div class="camera-section card">
+                <h3>Live Camera Feed</h3>
                 <video id="video" autoplay muted></video>
                 <div class="controls">
                     <button id="startBtn" class="btn btn-primary">Start Camera</button>
@@ -293,8 +38,8 @@
                 </div>
             </div>
 
-            <div class="debug-section">
-                <h3>🔍 Debug Information</h3>
+            <div class="debug-section card">
+                <h3>Debug Information</h3>
                 <div id="debugOutput">
                     <div class="debug-info">
                         <h4>System Status</h4>
