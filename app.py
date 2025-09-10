@@ -10,11 +10,9 @@ from datetime import datetime, timedelta
 import hashlib
 import secrets
 import threading
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.preprocessing import StandardScaler
 import pickle
 import torch
-from facenet_pytorch import MTCNN, InceptionResnetV1
+from facenet_pytorch import InceptionResnetV1
 from PIL import Image
 import torch.nn.functional as F
 
@@ -74,7 +72,6 @@ init_db()
 
 # Global variables for face recognition
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-mtcnn = MTCNN(keep_all=True, device='cpu')  # Face detection
 facenet = InceptionResnetV1(pretrained='vggface2').eval()  # Face recognition
 known_face_encodings = []
 known_face_names = []
@@ -297,7 +294,7 @@ def process_attendance():
             
             if model_ready and len(known_face_encodings) > 0:
                 try:
-                    # Extract LBP features from the detected face
+                    # Extract FaceNet features from the detected face
                     face_encoding = extract_face_encoding(face_roi)
                     
                     if face_encoding is not None:
@@ -725,7 +722,7 @@ def debug_attendance():
                 if model_ready and len(known_face_encodings) > 0:
                     face_debug['recognition_attempted'] = True
                     
-                    # Extract LBP features from the detected face
+                    # Extract FaceNet features from the detected face
                     face_encoding = extract_face_encoding(face_roi)
                     face_debug['features_extracted'] = face_encoding is not None
                     

@@ -5,17 +5,10 @@ flask==2.3.3
 flask-cors==4.0.0
 pillow==10.0.1
 
-# Machine learning libraries
-scikit-learn==1.3.0
-scipy==1.11.1
-
-# Deep learning framework (choose one - PyTorch for facenet-pytorch)
+# Deep learning framework for face recognition
 torch==2.0.1
 torchvision==0.15.2
 facenet-pytorch==2.5.3
-
-# Optional: TensorFlow (commented out to avoid conflicts with PyTorch)
-# tensorflow==2.13.0
 
 # Note: face-recognition package removed due to dlib compilation issues on Windows
 # The application uses facenet-pytorch for face recognition instead
