@@ -114,6 +114,16 @@
             transform: translateY(-2px);
         }
 
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+        }
+
         .debug-section {
             background: #f8f9fa;
             border-radius: 15px;
@@ -300,6 +310,8 @@
         let startBtn = document.getElementById('startBtn');
         let debugBtn = document.getElementById('debugBtn');
         let stopBtn = document.getElementById('stopBtn');
+        let cleanupBtn = document.getElementById('cleanupBtn');
+        let clearAllBtn = document.getElementById('clearAllBtn');
         let debugOutput = document.getElementById('debugOutput');
         let alert = document.getElementById('alert');
 

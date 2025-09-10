@@ -13,6 +13,10 @@ import threading
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.preprocessing import StandardScaler
 import pickle
+import torch
+from facenet_pytorch import MTCNN, InceptionResnetV1
+from PIL import Image
+import torch.nn.functional as F
 
 app = Flask(__name__)
 app.secret_key = secrets.token_hex(16)
@@ -70,53 +74,61 @@ init_db()
 
 # Global variables for face recognition
 face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
-face_recognizer = None
-face_scaler = None
-student_labels = []
-student_names = []
+mtcnn = MTCNN(keep_all=True, device='cpu')  # Face detection
+facenet = InceptionResnetV1(pretrained='vggface2').eval()  # Face recognition
+known_face_encodings = []
+known_face_names = []
 model_ready = False
 
-def extract_face_features(face_image):
-    """Extract features from face image using multiple methods"""
-    features = []
-    
-    # Normalize the image first
-    face_image = cv2.equalizeHist(face_image)
-    
-    # 1. Simple pixel-based features (most reliable)
-    # Resize to smaller size for consistency
-    face_small = cv2.resize(face_image, (32, 32))
-    features.extend(face_small.flatten())
-    
-    # 2. Statistical features
-    features.extend([
-        np.mean(face_image),
-        np.std(face_image),
-        np.var(face_image),
-        np.median(face_image)
-    ])
-    
-    # 3. Histogram features
-    hist, _ = np.histogram(face_image.ravel(), bins=16, range=(0, 256))
-    features.extend(hist)
-    
-    # 4. Block-based features (divide image into 4x4 blocks)
-    h, w = face_image.shape
-    block_h, block_w = h // 4, w // 4
-    for i in range(4):
-        for j in range(4):
-            start_h, end_h = i * block_h, (i + 1) * block_h
-            start_w, end_w = j * block_w, (j + 1) * block_w
-            block = face_image[start_h:end_h, start_w:end_w]
-            features.extend([
-                np.mean(block),
-                np.std(block)
-            ])
-    
-    return np.array(features, dtype=np.float32)
+def convert_numpy_types(obj):
+    """Convert NumPy types to native Python types for JSON serialization"""
+    if isinstance(obj, np.integer):
+        return int(obj)
+    elif isinstance(obj, np.floating):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, dict):
+        return {key: convert_numpy_types(value) for key, value in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy_types(item) for item in obj]
+    else:
+        return obj
+
+def extract_face_encoding(face_image):
+    """Extract face encoding using FaceNet deep learning model"""
+    try:
+        # Convert OpenCV image to PIL Image
+        if len(face_image.shape) == 2:
+            # Grayscale to RGB
+            face_rgb = cv2.cvtColor(face_image, cv2.COLOR_GRAY2RGB)
+        else:
+            face_rgb = face_image
+        
+        # Convert BGR to RGB for PIL
+        face_rgb = cv2.cvtColor(face_rgb, cv2.COLOR_BGR2RGB)
+        pil_image = Image.fromarray(face_rgb)
+        
+        # Resize to 160x160 (FaceNet input size)
+        pil_image = pil_image.resize((160, 160))
+        
+        # Convert to tensor and normalize
+        face_tensor = torch.tensor(np.array(pil_image)).permute(2, 0, 1).float()
+        face_tensor = (face_tensor - 127.5) / 128.0  # Normalize to [-1, 1]
+        face_tensor = face_tensor.unsqueeze(0)  # Add batch dimension
+        
+        # Extract face embedding using FaceNet
+        with torch.no_grad():
+            face_embedding = facenet(face_tensor)
+            face_embedding = F.normalize(face_embedding, p=2, dim=1)  # L2 normalize
+        
+        return face_embedding.squeeze().numpy()
+    except Exception as e:
+        print(f"Error extracting face encoding: {e}")
+        return None
 
 def load_face_encodings():
-    global face_recognizer, face_scaler, student_labels, student_names, model_ready
+    global known_face_encodings, known_face_names, model_ready
     conn = sqlite3.connect('attendance.db')
     cursor = conn.cursor()
     
@@ -127,72 +139,52 @@ def load_face_encodings():
         conn.close()
         return
     
-    all_features = []
-    student_labels = []
-    student_names = []
+    known_face_encodings = []
+    known_face_names = []
     
-    for student_idx, (name, student_id, encodings_json) in enumerate(students):
+    for name, student_id, encodings_json in students:
         encodings = json.loads(encodings_json)
         for encoding in encodings:
             face_array = np.array(encoding, dtype=np.uint8)
-            features = extract_face_features(face_array)
-            all_features.append(features)
-            student_labels.append(student_idx)
-            student_names.append(f"{name} ({student_id})")
+            
+            # Extract FaceNet features
+            face_encoding = extract_face_encoding(face_array)
+            if face_encoding is not None:
+                known_face_encodings.append(face_encoding)
+                known_face_names.append(f"{name} ({student_id})")
     
-    if len(all_features) > 0:
-        # Normalize features
-        face_scaler = StandardScaler()
-        normalized_features = face_scaler.fit_transform(all_features)
-        
-        # Train KNN classifier with dynamic neighbors
-        n_neighbors = max(1, min(3, len(normalized_features)))
-        print(f"Training KNN with {n_neighbors} neighbors for {len(normalized_features)} samples")
-        face_recognizer = KNeighborsClassifier(
-            n_neighbors=n_neighbors, 
-            weights='distance',
-            algorithm='auto',
-            metric='euclidean'
-        )
-        face_recognizer.fit(normalized_features, student_labels)
-        
+    if len(known_face_encodings) > 0:
         # Save the trained model
         with open('face_model.pkl', 'wb') as f:
             pickle.dump({
-                'recognizer': face_recognizer,
-                'scaler': face_scaler,
-                'student_names': student_names
+                'encodings': known_face_encodings,
+                'names': known_face_names
             }, f)
         
         model_ready = True
-        print(f"Model trained with {len(student_names)} students")
+        print(f"Loaded {len(known_face_names)} face encodings")
     else:
         model_ready = False
-        print("No students found for training")
+        print("No valid face encodings found")
     
     conn.close()
 
 def load_saved_model():
     """Load saved face recognition model if it exists"""
-    global face_recognizer, face_scaler, student_names, model_ready
+    global known_face_encodings, known_face_names, model_ready
     if os.path.exists('face_model.pkl'):
         try:
             with open('face_model.pkl', 'rb') as f:
                 model_data = pickle.load(f)
-                # Check if the model was trained with the old feature extraction
-                # by testing the scaler with a sample feature vector
-                test_features = np.random.random((1, 1076))  # New feature size
-                try:
-                    model_data['scaler'].transform(test_features)
-                    # If this works, the model is compatible
-                    face_recognizer = model_data['recognizer']
-                    face_scaler = model_data['scaler']
-                    student_names = model_data['student_names']
+                # Check if it's the new format
+                if 'encodings' in model_data and 'names' in model_data:
+                    known_face_encodings = model_data['encodings']
+                    known_face_names = model_data['names']
                     model_ready = True
-                    print(f"Loaded face recognition model with {len(student_names)} students")
-                except ValueError:
-                    # Feature dimension mismatch, retrain the model
-                    print("Feature dimension mismatch detected. Retraining model...")
+                    print(f"Loaded face recognition model with {len(known_face_names)} students")
+                else:
+                    # Old format, retrain the model
+                    print("Old model format detected. Retraining with new system...")
                     load_face_encodings()
         except Exception as e:
             print(f"Error loading saved model: {e}")
@@ -303,31 +295,42 @@ def process_attendance():
             face_roi = gray_frame[y:y+h, x:x+w]
             face_roi = cv2.resize(face_roi, (100, 100))  # Resize for consistency
             
-            if model_ready and face_recognizer is not None and len(student_names) > 0:
+            if model_ready and len(known_face_encodings) > 0:
                 try:
-                    # Extract features from the detected face
-                    face_features = extract_face_features(face_roi)
-                    face_features = face_features.reshape(1, -1)
+                    # Extract LBP features from the detected face
+                    face_encoding = extract_face_encoding(face_roi)
                     
-                    # Normalize features
-                    normalized_features = face_scaler.transform(face_features)
-                    
-                    # Predict using KNN
-                    prediction = face_recognizer.predict(normalized_features)
-                    distances, indices = face_recognizer.kneighbors(normalized_features, n_neighbors=face_recognizer.n_neighbors)
-                    
-                    # Calculate confidence based on distance to nearest neighbors
-                    # For KNN, smaller distances mean higher confidence
-                    avg_distance = np.mean(distances[0])
-                    # Use a more reasonable confidence mapping
-                    # Scale the distance to a 0-100% confidence range
-                    # Assuming distances typically range from 0 to 100
-                    confidence_percentage = max(0, 100 - (avg_distance / 100))
-                    
-                    if confidence_percentage > 70:  # Higher threshold to reduce false positives
-                        student_idx = prediction[0]
-                        if student_idx < len(student_names):
-                            name = student_names[student_idx]
+                    if face_encoding is not None:
+                        # Calculate cosine similarities to all known faces
+                        similarities = []
+                        for known_encoding in known_face_encodings:
+                            # Cosine similarity (higher = more similar)
+                            similarity = np.dot(face_encoding, known_encoding) / (
+                                np.linalg.norm(face_encoding) * np.linalg.norm(known_encoding)
+                            )
+                            similarities.append(similarity)
+                        
+                        similarities = np.array(similarities)
+                        
+                        # Find the best match
+                        best_match_index = np.argmax(similarities)
+                        best_similarity = similarities[best_match_index]
+                        
+                        # Convert similarity to confidence percentage
+                        # FaceNet similarity: 1.0 = perfect match, 0.0 = no similarity
+                        # Typical good matches: 0.6-1.0, poor matches: 0.0-0.6
+                        if best_similarity >= 0.8:  # Excellent match
+                            confidence_percentage = min(100, 80 + (best_similarity - 0.8) * 100)
+                        elif best_similarity >= 0.7:  # Good match
+                            confidence_percentage = 60 + (best_similarity - 0.7) * 200
+                        elif best_similarity >= 0.6:  # Moderate match
+                            confidence_percentage = 40 + (best_similarity - 0.6) * 200
+                        else:  # Poor match
+                            confidence_percentage = best_similarity * 66.67
+                        
+                        # Only accept if confidence is high enough
+                        if confidence_percentage > 75:  # High threshold for reliability
+                            name = known_face_names[best_match_index]
                             student_id = name.split('(')[1].split(')')[0]
                             
                             # Check if already marked today
@@ -430,6 +433,7 @@ def train_face():
                 # Apply histogram equalization for better contrast
                 face_roi = cv2.equalizeHist(face_roi)
                 
+                # Store the face image for later encoding
                 face_encodings.append(face_roi.tolist())
         
         if len(face_encodings) == 0:
@@ -532,8 +536,8 @@ def get_model_status():
     """Check if the face recognition model is ready"""
     return jsonify({
         'model_ready': model_ready,
-        'student_count': len(student_names),
-        'students': student_names
+        'student_count': len(known_face_names),
+        'students': known_face_names
     })
 
 @app.route('/api/students')
@@ -611,10 +615,10 @@ def clear_all_data():
             os.remove('face_model.pkl')
         
         # Reset global variables
-        global face_recognizer, face_scaler, student_names
-        face_recognizer = None
-        face_scaler = None
-        student_names = []
+        global known_face_encodings, known_face_names, model_ready
+        known_face_encodings = []
+        known_face_names = []
+        model_ready = False
         
         return jsonify({
             'success': True,
@@ -669,10 +673,10 @@ def debug_attendance():
         
         debug_info = {
             'faces_detected': 0,
-            'face_recognizer_status': face_recognizer is not None,
-            'student_count': len(student_names),
-            'student_names': student_names,
-            'knn_neighbors': face_recognizer.n_neighbors if face_recognizer else 0,
+            'face_recognizer_status': model_ready,
+            'student_count': len(known_face_names),
+            'student_names': known_face_names,
+            'knn_neighbors': len(known_face_encodings),
             'recognition_attempts': [],
             'errors': []
         }
@@ -718,48 +722,59 @@ def debug_attendance():
                 face_roi = gray_frame[y:y+h, x:x+w]
                 face_roi = cv2.resize(face_roi, (100, 100))
                 
-                if model_ready and face_recognizer is not None and len(student_names) > 0:
+                if model_ready and len(known_face_encodings) > 0:
                     face_debug['recognition_attempted'] = True
                     
-                    # Extract features
-                    face_features = extract_face_features(face_roi)
-                    face_features = face_features.reshape(1, -1)
-                    face_debug['features_extracted'] = True
-                    face_debug['feature_count'] = len(face_features[0])
-                    face_debug['feature_range'] = f"{np.min(face_features[0]):.2f} to {np.max(face_features[0]):.2f}"
-                    face_debug['feature_mean'] = f"{np.mean(face_features[0]):.2f}"
+                    # Extract LBP features from the detected face
+                    face_encoding = extract_face_encoding(face_roi)
+                    face_debug['features_extracted'] = face_encoding is not None
                     
-                    # Normalize features
-                    normalized_features = face_scaler.transform(face_features)
-                    
-                    # Predict using KNN
-                    prediction = face_recognizer.predict(normalized_features)
-                    distances, indices = face_recognizer.kneighbors(normalized_features, n_neighbors=face_recognizer.n_neighbors)
-                    
-                    face_debug['prediction_made'] = True
-                    face_debug['predicted_label'] = int(prediction[0])
-                    face_debug['distances'] = distances[0].tolist()
-                    
-                    # Calculate confidence
-                    avg_distance = np.mean(distances[0])
-                    face_debug['avg_distance'] = round(avg_distance, 3)
-                    # Use a more reasonable confidence mapping
-                    confidence_percentage = max(0, 100 - (avg_distance / 100))
-                    face_debug['confidence'] = round(confidence_percentage, 2)
-                    face_debug['confidence_formula'] = f"100 - ({avg_distance:.3f} / 100) = {confidence_percentage:.2f}%"
-                    
-                    if confidence_percentage > 70:
-                        student_idx = prediction[0]
-                        if student_idx < len(student_names):
-                            face_debug['predicted_student'] = student_names[student_idx]
+                    if face_encoding is not None:
+                        face_debug['feature_count'] = len(face_encoding)
+                        face_debug['feature_range'] = f"{float(np.min(face_encoding)):.3f} to {float(np.max(face_encoding)):.3f}"
+                        face_debug['feature_mean'] = f"{float(np.mean(face_encoding)):.3f}"
+                        
+                        # Calculate cosine similarities to all known faces
+                        similarities = []
+                        for known_encoding in known_face_encodings:
+                            similarity = np.dot(face_encoding, known_encoding) / (
+                                np.linalg.norm(face_encoding) * np.linalg.norm(known_encoding)
+                            )
+                            similarities.append(float(similarity))  # Convert to Python float
+                        
+                        face_debug['prediction_made'] = True
+                        face_debug['all_similarities'] = [round(float(s), 3) for s in similarities]
+                        
+                        # Find the best match
+                        best_match_index = int(np.argmax(similarities))
+                        best_similarity = float(similarities[best_match_index])
+                        face_debug['best_match_index'] = best_match_index
+                        face_debug['best_similarity'] = round(best_similarity, 3)
+                        
+                        # Convert similarity to confidence percentage
+                        if best_similarity >= 0.8:  # Excellent match
+                            confidence_percentage = min(100, 80 + (best_similarity - 0.8) * 100)
+                        elif best_similarity >= 0.7:  # Good match
+                            confidence_percentage = 60 + (best_similarity - 0.7) * 200
+                        elif best_similarity >= 0.6:  # Moderate match
+                            confidence_percentage = 40 + (best_similarity - 0.6) * 200
+                        else:  # Poor match
+                            confidence_percentage = best_similarity * 66.67
+                        
+                        face_debug['confidence'] = round(float(confidence_percentage), 2)
+                        face_debug['confidence_formula'] = f"FaceNet cosine similarity: {best_similarity:.3f}"
+                        
+                        # Only accept if confidence is high enough
+                        if confidence_percentage > 75:
+                            face_debug['predicted_student'] = known_face_names[best_match_index]
                         else:
-                            face_debug['error'] = f"Student index {student_idx} out of range (max: {len(student_names)-1})"
+                            face_debug['error'] = f"Confidence too low: {confidence_percentage:.2f}% (threshold: 75%)"
                     else:
-                        face_debug['error'] = f"Confidence too low: {confidence_percentage:.2f}% (threshold: 70%)"
+                        face_debug['error'] = "Could not extract FaceNet features"
                 else:
-                    if face_recognizer is None:
-                        face_debug['error'] = "Face recognizer not trained"
-                    if len(student_names) == 0:
+                    if not model_ready:
+                        face_debug['error'] = "Face recognition model not ready"
+                    if len(known_face_encodings) == 0:
                         face_debug['error'] = "No students registered"
                         
             except Exception as e:
@@ -767,6 +782,9 @@ def debug_attendance():
                 debug_info['errors'].append(f"Face {idx}: {str(e)}")
             
             debug_info['recognition_attempts'].append(face_debug)
+        
+        # Convert all NumPy types to Python types for JSON serialization
+        debug_info = convert_numpy_types(debug_info)
         
         return jsonify({
             'success': True,
